@@ -1,0 +1,310 @@
+#cmd to run is: py -m streamlit run wsgraph2.0.py
+import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.graph_objects as go
+import plotly.express as px
+
+st.set_page_config(page_title="Wear Study Graph Tool", layout="wide")
+
+st.title("Wear Study Graph Tool")
+
+# =============================================================================
+# CONSTANTS
+# =============================================================================
+
+CONDITION_COLUMNS = [
+    "Start Date",
+    "Skin Tape",
+    "Device Tape",
+    "Skin Tape Orientation",
+    "Adhesive",
+    "Backing Material",
+    "# Participants",
+    "Puck #"
+]
+
+EXACT_DUPLICATE_GROUP = [
+    "Skin Tape",
+    "Device Tape",
+    "Skin Tape Orientation",
+    "Adhesive",
+    "Backing Material"
+]
+
+DAY_COLUMNS = [str(i) for i in range(31)]
+
+# =============================================================================
+# FILE UPLOAD
+# =============================================================================
+
+uploaded_file = st.file_uploader(
+    "Upload Wear Study Excel File",
+    type=["xlsx", "xls"]
+)
+
+if uploaded_file is None:
+    st.info("Upload a file to begin.")
+    st.stop()
+
+df = pd.read_excel(uploaded_file)
+df.columns = [str(c) for c in df.columns]
+
+if "Start Date" in df.columns:
+    df["Start Date"] = pd.to_datetime(df["Start Date"], errors="coerce")
+
+# =============================================================================
+# FIX: percentage scaling (0-1 → 0-100)
+# =============================================================================
+
+df[DAY_COLUMNS] = df[DAY_COLUMNS].apply(pd.to_numeric, errors="coerce")
+
+if df[DAY_COLUMNS].max().max() <= 1.01:
+    df[DAY_COLUMNS] = df[DAY_COLUMNS] * 100
+
+days = np.array([int(d) for d in DAY_COLUMNS])
+
+# =============================================================================
+# SIDEBAR - DISPLAY MODE
+# =============================================================================
+
+st.sidebar.header("Display Mode")
+
+display_mode = st.sidebar.radio(
+    "Choose Mode",
+    [
+        "Individual Studies",
+        "Average Exact Duplicates",
+        "Average By Category"
+    ]
+)
+
+average_by = None
+
+show_bounds = st.sidebar.checkbox(
+    "Show Average Min/Max Bounds",
+    value=False
+)
+
+show_legend = st.sidebar.checkbox(
+    "Show Legend",
+    value=True
+)
+
+if display_mode == "Average By Category":
+    average_by = st.sidebar.multiselect(
+        "Average By (select one or more)",
+        CONDITION_COLUMNS,
+        default=["Adhesive"]
+    )
+
+# =============================================================================
+# SIDEBAR - FILTERS
+# =============================================================================
+
+st.sidebar.header("Filters")
+
+filtered_df = df.copy()
+
+# Select / Deselect all
+col1, col2 = st.sidebar.columns(2)
+
+if col1.button("Select All Filters"):
+    st.rerun()
+
+if col2.button("Reset Filters"):
+    st.rerun()
+
+for col in CONDITION_COLUMNS:
+
+    if col not in filtered_df.columns:
+        continue
+
+    unique_vals = sorted(filtered_df[col].dropna().unique())
+
+    selected = st.sidebar.multiselect(
+        col,
+        unique_vals,
+        default=unique_vals,
+        key=f"filter_{col}"
+    )
+
+    filtered_df = filtered_df[filtered_df[col].isin(selected)]
+
+# =============================================================================
+# SUMMARY
+# =============================================================================
+
+st.subheader("Summary")
+
+c1, c2 = st.columns(2)
+
+c1.metric("Studies", len(filtered_df))
+
+c2.metric("Unique Rows", len(filtered_df))
+
+# =============================================================================
+# GRAPH
+# =============================================================================
+
+fig = go.Figure()
+
+# -----------------------------------------------------------------------------
+# MODE 1: Individual studies
+# -----------------------------------------------------------------------------
+
+if display_mode == "Individual Studies":
+
+    for _, row in filtered_df.iterrows():
+
+        y = row[DAY_COLUMNS].values
+
+        label = f"{row.get('Adhesive','')} | {row.get('Puck #','')}"
+
+        fig.add_trace(
+            go.Scatter(
+                x=days,
+                y=y,
+                mode="lines+markers",
+                name=label
+            )
+        )
+
+# -----------------------------------------------------------------------------
+# MODE 2: Average exact duplicates
+# -----------------------------------------------------------------------------
+
+elif display_mode == "Average Exact Duplicates":
+
+    grouped = filtered_df.groupby(EXACT_DUPLICATE_GROUP, dropna=False)
+
+    for i, (group_name, group_df) in enumerate(grouped):
+
+        mean_curve = group_df[DAY_COLUMNS].mean()
+        min_curve = group_df[DAY_COLUMNS].min()
+        max_curve = group_df[DAY_COLUMNS].max()
+
+        label = " | ".join([str(x) for x in group_name])
+
+        color = px.colors.qualitative.Plotly[i % len(px.colors.qualitative.Plotly)]
+
+        # Mean line
+        fig.add_trace(
+            go.Scatter(
+                x=days,
+                y=mean_curve.values,
+                mode="lines+markers",
+                name=f"{label} (n={len(group_df)})",
+                line=dict(color=color)
+            )
+        )
+
+        # Min/Max bounds (optional)
+        if show_bounds:
+            fig.add_trace(
+                go.Scatter(
+                    x=days,
+                    y=min_curve.values,
+                    mode="lines",
+                    name=f"{label} MIN",
+                    line=dict(color=color, dash="dash"),
+                    showlegend=False
+                )
+            )
+
+            fig.add_trace(
+                go.Scatter(
+                    x=days,
+                    y=max_curve.values,
+                    mode="lines",
+                    name=f"{label} MAX",
+                    line=dict(color=color, dash="dash"),
+                    showlegend=False
+                )
+            )
+
+# -----------------------------------------------------------------------------
+# MODE 3: Average by user-selected category(ies)
+# -----------------------------------------------------------------------------
+
+elif display_mode == "Average By Category":
+
+    if not average_by:
+        st.warning("Select at least one grouping category.")
+        st.stop()
+
+    grouped = filtered_df.groupby(average_by, dropna=False)
+
+    for i, (group_name, group_df) in enumerate(grouped):
+
+        mean_curve = group_df[DAY_COLUMNS].mean()
+        min_curve = group_df[DAY_COLUMNS].min()
+        max_curve = group_df[DAY_COLUMNS].max()
+
+        if isinstance(group_name, tuple):
+            label = " | ".join([str(x) for x in group_name])
+        else:
+            label = str(group_name)
+
+        color = px.colors.qualitative.Plotly[i % len(px.colors.qualitative.Plotly)]
+
+        # Mean line
+        fig.add_trace(
+            go.Scatter(
+                x=days,
+                y=mean_curve.values,
+                mode="lines+markers",
+                name=f"{label} (n={len(group_df)})",
+                line=dict(color=color)
+            )
+        )
+
+        # Min/Max bounds (optional)
+        if show_bounds:
+            fig.add_trace(
+                go.Scatter(
+                    x=days,
+                    y=min_curve.values,
+                    mode="lines",
+                    name=f"{label} MIN",
+                    line=dict(color=color, dash="dash"),
+                    showlegend=False
+                )
+            )
+
+            fig.add_trace(
+                go.Scatter(
+                    x=days,
+                    y=max_curve.values,
+                    mode="lines",
+                    name=f"{label} MAX",
+                    line=dict(color=color, dash="dash"),
+                    showlegend=False
+                )
+            )
+
+# =============================================================================
+# LAYOUT
+# =============================================================================
+
+fig.update_layout(
+    title="Wear Study Curves",
+    xaxis_title="Day",
+    yaxis_title="% Remaining",
+    height=800,
+    hovermode="closest",
+    showlegend=show_legend
+)
+
+fig.update_xaxes(dtick=1, range=[0, 30])
+fig.update_yaxes(range=[0, 100])
+
+st.plotly_chart(fig, use_container_width=True)
+
+# =============================================================================
+# DATA TABLE
+# =============================================================================
+
+st.subheader("Filtered Data")
+
+st.dataframe(filtered_df, use_container_width=True)
