@@ -104,6 +104,12 @@ show_legend = st.sidebar.checkbox(
     value=True
 )
 
+color_by = st.sidebar.selectbox(
+    "Color Curves By",
+    ["None"] + CONDITION_COLUMNS,
+    index=0
+)
+
 if display_mode == "Average By Category":
     average_by = st.sidebar.multiselect(
         "Average By (select one or more)",
@@ -160,6 +166,28 @@ c2.metric("Unique Rows", len(filtered_df))
 # GRAPH
 # =============================================================================
 
+color_map = {}
+
+if color_by != "None" and color_by in filtered_df.columns:
+
+    unique_vals = sorted(
+        filtered_df[color_by]
+        .fillna("Missing")
+        .astype(str)
+        .unique()
+    )
+
+    palette = (
+        px.colors.qualitative.Plotly +
+        px.colors.qualitative.Dark24 +
+        px.colors.qualitative.Light24
+    )
+
+    color_map = {
+        val: palette[i % len(palette)]
+        for i, val in enumerate(unique_vals)
+    }
+
 fig = go.Figure()
 
 # -----------------------------------------------------------------------------
@@ -176,12 +204,21 @@ if display_mode == "Individual Studies":
 
         hover_text = build_hover_text(row)
 
+        curve_color = None
+
+        if color_by != "None":
+            curve_color = color_map.get(
+                str(row.get(color_by, "Missing")),
+                None
+            )
+
         fig.add_trace(
             go.Scatter(
                 x=days,
                 y=y,
                 mode="lines+markers",
                 name=label,
+                line=dict(color=curve_color) if curve_color else None
                 hovertemplate=
                     hover_text +
                     "<br>Day=%{x}" +
@@ -207,7 +244,18 @@ elif display_mode == "Average Exact Duplicates":
 
         label = " | ".join([str(x) for x in group_name])
 
-        color = px.colors.qualitative.Plotly[i % len(px.colors.qualitative.Plotly)]
+        if color_by != "None":
+
+            idx = CONDITION_COLUMNS.index(color_by)
+
+            if idx < len(group_name):
+                color_key = str(group_name[idx])
+                color = color_map.get(color_key)
+            else:
+                color = px.colors.qualitative.Plotly[i % len(px.colors.qualitative.Plotly)]
+
+        else:
+            color = px.colors.qualitative.Plotly[i % len(px.colors.qualitative.Plotly)]
 
         # Mean line
         hover_text = (
@@ -281,7 +329,16 @@ elif display_mode == "Average By Category":
         else:
             label = str(group_name)
 
-        color = px.colors.qualitative.Plotly[i % len(px.colors.qualitative.Plotly)]
+        if color_by != "None":
+
+            if color_by in group_df.columns:
+                color_key = str(group_df.iloc[0][color_by])
+                color = color_map.get(color_key)
+            else:
+                color = px.colors.qualitative.Plotly[i % len(px.colors.qualitative.Plotly)]
+
+        else:
+            color = px.colors.qualitative.Plotly[i % len(px.colors.qualitative.Plotly)]
 
         # Mean line
         hover_text = (
