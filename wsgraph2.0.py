@@ -35,6 +35,19 @@ EXACT_DUPLICATE_GROUP = [
 DAY_COLUMNS = [str(i) for i in range(31)]
 
 # =============================================================================
+# HOVER TOOLTIP HELPER
+# =============================================================================
+
+def build_hover_text(row):
+    lines = []
+
+    for col in CONDITION_COLUMNS:
+        if col in row.index:
+            lines.append(f"{col}: {row[col]}")
+
+    return "<br>".join(lines)
+
+# =============================================================================
 # FILE UPLOAD
 # =============================================================================
 
@@ -161,14 +174,22 @@ if display_mode == "Individual Studies":
 
         label = f"{row.get('Adhesive','')} | {row.get('Puck #','')}"
 
+        hover_text = build_hover_text(row)
+
         fig.add_trace(
             go.Scatter(
                 x=days,
                 y=y,
                 mode="lines+markers",
-                name=label
+                name=label,
+                hovertemplate=
+                    hover_text +
+                    "<br>Day=%{x}" +
+                    "<br>% Remaining=%{y:.1f}" +
+                    "<extra></extra>"
             )
         )
+            
 
 # -----------------------------------------------------------------------------
 # MODE 2: Average exact duplicates
@@ -189,13 +210,27 @@ elif display_mode == "Average Exact Duplicates":
         color = px.colors.qualitative.Plotly[i % len(px.colors.qualitative.Plotly)]
 
         # Mean line
+        hover_text = (
+            f"Studies Averaged: {len(group_df)}<br>"
+            f"Skin Tape: {group_name[0]}<br>"
+            f"Device Tape: {group_name[1]}<br>"
+            f"Orientation: {group_name[2]}<br>"
+            f"Adhesive: {group_name[3]}<br>"
+            f"Backing: {group_name[4]}"
+        )
+
         fig.add_trace(
             go.Scatter(
                 x=days,
                 y=mean_curve.values,
                 mode="lines+markers",
                 name=f"{label} (n={len(group_df)})",
-                line=dict(color=color)
+                line=dict(color=color),
+                hovertemplate=
+                    hover_text +
+                    "<br>Day=%{x}" +
+                    "<br>% Remaining=%{y:.1f}" +
+                    "<extra></extra>"
             )
         )
 
@@ -249,13 +284,23 @@ elif display_mode == "Average By Category":
         color = px.colors.qualitative.Plotly[i % len(px.colors.qualitative.Plotly)]
 
         # Mean line
+        hover_text = (
+            f"Studies Averaged: {len(group_df)}<br>"
+            f"Group: {label}"
+        )
+
         fig.add_trace(
             go.Scatter(
                 x=days,
                 y=mean_curve.values,
                 mode="lines+markers",
                 name=f"{label} (n={len(group_df)})",
-                line=dict(color=color)
+                line=dict(color=color),
+                hovertemplate=
+                    hover_text +
+                    "<br>Day=%{x}" +
+                    "<br>% Remaining=%{y:.1f}" +
+                    "<extra></extra>"
             )
         )
 
