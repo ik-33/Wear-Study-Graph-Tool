@@ -218,7 +218,7 @@ if display_mode == "Individual Studies":
                 y=y,
                 mode="lines+markers",
                 name=label,
-                line=dict(color=curve_color) if curve_color else None
+                line=dict(color=curve_color) if curve_color else None,
                 hovertemplate=
                     hover_text +
                     "<br>Day=%{x}" +
