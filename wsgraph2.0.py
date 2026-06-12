@@ -125,27 +125,27 @@ st.sidebar.header("Filters")
 
 filtered_df = df.copy()
 
-# Select / Deselect all
-col1, col2 = st.sidebar.columns(2)
-
-if col1.button("Select All Filters"):
-    st.rerun()
-
-if col2.button("Reset Filters"):
-    st.rerun()
+# Select all filters
+select_all = st.sidebar.button("Restore All Filters")
 
 for col in CONDITION_COLUMNS:
 
     if col not in filtered_df.columns:
         continue
 
-    unique_vals = sorted(filtered_df[col].dropna().unique())
+    # Use original dataframe so all possible values are available
+    unique_vals = sorted(df[col].dropna().unique())
+
+    filter_key = f"filter_{col}"
+
+    if select_all:
+        st.session_state[filter_key] = unique_vals
 
     selected = st.sidebar.multiselect(
         col,
         unique_vals,
         default=unique_vals,
-        key=f"filter_{col}"
+        key=filter_key
     )
 
     filtered_df = filtered_df[filtered_df[col].isin(selected)]
@@ -190,6 +190,12 @@ if color_by != "None" and color_by in filtered_df.columns:
 
 fig = go.Figure()
 
+# =============================================================================
+# RANKING TABLE STORAGE
+# =============================================================================
+
+ranking_rows = []
+
 # -----------------------------------------------------------------------------
 # MODE 1: Individual studies
 # -----------------------------------------------------------------------------
@@ -199,6 +205,16 @@ if display_mode == "Individual Studies":
     for _, row in filtered_df.iterrows():
 
         y = row[DAY_COLUMNS].values
+
+        day30 = y[-1]
+
+        auc = np.trapz(y, days)
+
+        ranking_rows.append({
+            "Curve": f"{row.get('Adhesive','')} | {row.get('Puck #','')}",
+            "Day 30 % Remaining": day30,
+            "AUC": auc
+        })
 
         label = f"{row.get('Adhesive','')} | {row.get('Puck #','')}"
 
@@ -243,6 +259,17 @@ elif display_mode == "Average Exact Duplicates":
         max_curve = group_df[DAY_COLUMNS].max()
 
         label = " | ".join([str(x) for x in group_name])
+
+        day30 = mean_curve.iloc[-1]
+
+        auc = np.trapz(mean_curve.values, days)
+
+        ranking_rows.append({
+            "Curve": label,
+            "Day 30 % Remaining": day30,
+            "AUC": auc,
+            "Studies Averaged": len(group_df)
+        })
 
         if color_by != "None":
 
@@ -329,6 +356,17 @@ elif display_mode == "Average By Category":
         else:
             label = str(group_name)
 
+        day30 = mean_curve.iloc[-1]
+
+        auc = np.trapz(mean_curve.values, days)
+
+        ranking_rows.append({
+            "Curve": label,
+            "Day 30 % Remaining": day30,
+            "AUC": auc,
+            "Studies Averaged": len(group_df)
+        })
+
         if color_by != "None":
 
             if color_by in group_df.columns:
@@ -402,6 +440,40 @@ fig.update_xaxes(dtick=1, range=[0, 30])
 fig.update_yaxes(range=[0, 100])
 
 st.plotly_chart(fig, use_container_width=True)
+
+# =============================================================================
+# RANKING TABLES
+# =============================================================================
+
+if len(ranking_rows) > 0:
+
+    ranking_df = pd.DataFrame(ranking_rows)
+
+    st.subheader("Curve Rankings")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("### Ranked by Day 30 % Remaining")
+
+        st.dataframe(
+            ranking_df.sort_values(
+                "Day 30 % Remaining",
+                ascending=False
+            ).reset_index(drop=True),
+            use_container_width=True
+        )
+
+    with col2:
+        st.markdown("### Ranked by Area Under Curve (AUC)")
+
+        st.dataframe(
+            ranking_df.sort_values(
+                "AUC",
+                ascending=False
+            ).reset_index(drop=True),
+            use_container_width=True
+        )
 
 # =============================================================================
 # DATA TABLE
