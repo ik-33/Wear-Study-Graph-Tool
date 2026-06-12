@@ -134,12 +134,9 @@ for col in CONDITION_COLUMNS:
         continue
 
     # Use original dataframe so all possible values are available
-    vals = df[col].dropna().unique()
+    vals = list(df[col].dropna().unique())
 
-    try:
-        unique_vals = sorted(vals)
-    except TypeError:
-        unique_vals = sorted([str(v) for v in vals])
+    unique_vals = sorted(vals, key=lambda x: str(x))
 
     filter_key = f"filter_{col}"
 
