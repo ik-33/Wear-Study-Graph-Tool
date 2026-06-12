@@ -213,7 +213,7 @@ if display_mode == "Individual Studies":
 
         day30 = y[-1]
 
-        auc = np.trapz(y, days)
+        auc = np.trapezoid(y, days)
 
         ranking_rows.append({
             "Curve": f"{row.get('Adhesive','')} | {row.get('Puck #','')}",
@@ -267,7 +267,7 @@ elif display_mode == "Average Exact Duplicates":
 
         day30 = mean_curve.iloc[-1]
 
-        auc = np.trapz(mean_curve.values, days)
+        auc = np.trapezoid(mean_curve.values, days)
 
         ranking_rows.append({
             "Curve": label,
@@ -363,7 +363,7 @@ elif display_mode == "Average By Category":
 
         day30 = mean_curve.iloc[-1]
 
-        auc = np.trapz(mean_curve.values, days)
+        auc = np.trapezoid(mean_curve.values, days)
 
         ranking_rows.append({
             "Curve": label,
